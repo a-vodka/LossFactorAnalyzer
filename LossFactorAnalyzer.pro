@@ -10,23 +10,26 @@ CONFIG += c++17
 
 SOURCES += \
     aboutdialog.cpp \
+    audiosettingsdialog.cpp \
+    generator.cpp \
     ledindicator.cpp \
     main.cpp \
     mainwindow.cpp \
     modbusconfigdialog.cpp \
-    modbusreader.cpp \
-    sinesweepgenerator.cpp
+    modbusreader.cpp
 
 HEADERS += \
     aboutdialog.h \
+    audiosettingsdialog.h \
+    generator.h \
     ledindicator.h \
     mainwindow.h \
     modbusconfigdialog.h \
-    modbusreader.h \
-    sinesweepgenerator.h
+    modbusreader.h
 
 FORMS += \
     aboutdialog.ui \
+    audiosettingsdialog.ui \
     mainwindow.ui \
     modbusconfigdialog.ui
 

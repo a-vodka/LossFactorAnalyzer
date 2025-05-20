@@ -5,6 +5,8 @@
 #include <QProgressBar>
 #include "modbusconfigdialog.h"
 #include "ledindicator.h"
+#include "generator.h"
+#include <QAudioSink>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -22,9 +24,12 @@ public:
     void updateProgress(int value);
 
 private slots:
-    void on_pushButton_clicked();
+
     void on_actionAbout_triggered();
     void on_actionCOM_Port_Settings_triggered();
+    void on_actionAudio_Settings_triggered();
+
+    void on_start_btn_clicked();
 
 private:
     Ui::MainWindow *ui;
@@ -33,5 +38,15 @@ private:
 
     LedIndicator *sensor1Indicator;
     LedIndicator *sensor2Indicator;
+
+    QScopedPointer<Generator> m_generator;
+    QScopedPointer<QAudioSink> m_audioOutput;
+
+    QTimer *m_progressTimer;
+    bool is_generator_works = false;
+    void stop_generation();
+    void start_generation();
+private slots:
+    void updateProgressBar();
 };
 #endif // MAINWINDOW_H

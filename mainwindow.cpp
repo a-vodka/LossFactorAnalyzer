@@ -1,15 +1,16 @@
 #include "mainwindow.h"
+#include "audiosettingsdialog.h"
+#include "generator.h"
 #include "ui_mainwindow.h"
 #include <QLineSeries>
 #include <aboutdialog.h>
 #include "modbusconfigdialog.h"
 #include "modbusreader.h"
-
 #include <QAudioOutput>
 #include <QAudioDevice>
 #include <QMediaDevices>
 #include <QTimer>
-#include "sinesweepgenerator.h"
+#include <QAudioSink>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -51,7 +52,6 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     QTimer* statusTimer = new QTimer(this);
-    //statusTimer->setInterval(1000);
     statusTimer->start(1000);
     connect(statusTimer, &QTimer::timeout, this, [reader, this](){
         bool ok1 = reader->device1ReadSuccess();
@@ -62,13 +62,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(qApp, &QCoreApplication::aboutToQuit, [=]() {
         reader->stop();
-        //thread->quit();
-        //thread->wait();
         reader->deleteLater();
-        //thread->deleteLater();
     });
 
-   // thread->start();
+    m_progressTimer = new QTimer(this);
+    connect(m_progressTimer, &QTimer::timeout, this, &MainWindow::updateProgressBar);
+
 
 
 }
@@ -87,9 +86,30 @@ void MainWindow::updateProgress(int value)
     progressBar->setValue(value);
 }
 
-void MainWindow::on_pushButton_clicked()
+
+QAudioDevice getAudioDeviceById(const QByteArray &deviceId, bool isInput = false)
 {
-    QLineSeries *series = new QLineSeries();
+    const QList<QAudioDevice> devices = isInput
+                                            ? QMediaDevices::audioInputs()
+                                            : QMediaDevices::audioOutputs();
+
+    for (const QAudioDevice &device : devices) {
+        if (device.id() == deviceId) {
+            qDebug() << "Found audio device with id" << deviceId;
+            return device;  // Found the matching device
+        }
+    }
+
+    qDebug() << "NOT Found audio device. Use Default";
+
+    return isInput ? QMediaDevices(nullptr).defaultAudioInput() : QMediaDevices(nullptr).defaultAudioOutput();  // Return default-constructed (invalid) if not found
+}
+
+
+
+void MainWindow::on_start_btn_clicked()
+{
+ /*   QLineSeries *series = new QLineSeries();
     series->append(0, 0);
     series->append(1, 2);
     series->append(2, 1);
@@ -100,53 +120,83 @@ void MainWindow::on_pushButton_clicked()
     chart->setTitle("Chart in Designer");
 
     ui->chartView->setChart(chart);
+*/
 
-    // Setup audio format
-    QAudioFormat format;
-    format.setSampleRate(48000);
-    format.setChannelCount(2);
-    format.setSampleFormat(QAudioFormat::Int16); // Qt 6
-
-    // Get default output device
-    QAudioDevice device = QMediaDevices::defaultAudioOutput();
-
-    if (!device.isFormatSupported(format)) {
-
-        const auto devices = QMediaDevices::audioOutputs();
-        for (const QAudioDevice &device : devices)
-        {
-            QAudioFormat qfm = device.preferredFormat();
-            qDebug() << "Device: " << device.description();
-            qDebug() << "Sample format: " <<qfm.sampleFormat();
-            qDebug() << "Channel config: " <<  qfm.channelConfig();
-            qDebug() << "Channel count:" << qfm.channelCount();
-            qDebug() << "Channel sanple rate:" << qfm.sampleRate();
-        }
-        qWarning() << "Audio format not supported by output device.";
-        return ;
+    if (is_generator_works)
+    {
+        stop_generation();
+    }
+    else
+    {
+        start_generation();
     }
 
-    // Sweep parameters
-    float startFreq = 200.0f;    // Hz
-    float endFreq   = 2000.0f;   // Hz
-    float duration  = 5.0f;      // seconds
+}
 
-    // Create sweep generator
-    auto generator = new SineSweepGenerator(startFreq, endFreq, duration, format);
-    auto audioOutput = new QAudioOutput(device, this);
+void MainWindow::stop_generation()
+{
+    is_generator_works = false;
+    m_progressTimer->stop();
 
-    // Start generation and playback
-    generator->start();
-   // audioOutput->start();
+    m_generator->stop();
+    m_audioOutput->stop();
+    m_audioOutput->disconnect(this);
+    ui->start_btn->setText("Start");
+}
 
+void MainWindow::start_generation()
+{
+    is_generator_works = true;
+    float startFreq = ui->start_freq->text().toFloat();   // Hz
+    float endFreq   = ui->end_freq->text().toFloat();     // Hz
+    float duration  = ui->duration->text().toFloat();     // seconds
 
+    QSettings settings;
+    QByteArray device_id = settings.value("audio/deviceId").toByteArray();
+    QAudioDevice DeviceInfo = getAudioDeviceById(device_id);
 
+    QAudioFormat format = DeviceInfo.preferredFormat();
+    qDebug() << "Device: " << DeviceInfo.description();
+    qDebug() << "Sample format: " <<format.sampleFormat();
+    qDebug() << "Channel config: " <<  format.channelConfig();
+    qDebug() << "Channel count:" << format.channelCount();
+    qDebug() << "Channel sample rate:" << format.sampleRate();
+
+    qint64 durationUs = duration * 1000000; // 3 seconds
+
+    int value = settings.value("audio/volume").toInt();
+    qreal linearVolume = QAudio::convertVolume(value / qreal(100), QAudio::LogarithmicVolumeScale,
+                                               QAudio::LinearVolumeScale);
+
+    qDebug() << "Linear volume:" << linearVolume;
+
+    m_generator.reset(new Generator(format, durationUs, startFreq, endFreq));
+    m_audioOutput.reset(new QAudioSink(DeviceInfo, format));
+    m_audioOutput->setVolume(linearVolume);
+    m_generator->start();
+    m_audioOutput->start(m_generator.data());
+
+    m_progressTimer->start(250);
+
+    ui->start_btn->setText("Stop");
 }
 
 void MainWindow::on_actionAbout_triggered()
 {
     AboutDialog dialog(this);
     dialog.exec();
+}
+
+void MainWindow::on_actionAudio_Settings_triggered()
+{
+    static AudioSettingsDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted)
+    {
+        QString deviceId = dialog.selectedDeviceId();
+        int volume = dialog.selectedVolume();
+        qDebug() << "Device id: " <<deviceId;
+        qDebug() << "Volume:" << volume;
+    }
 }
 
 void MainWindow::on_actionCOM_Port_Settings_triggered()
@@ -165,4 +215,21 @@ void MainWindow::on_actionCOM_Port_Settings_triggered()
         qDebug() << "Device 2 Address:" << addr2;
     }
 }
+
+void MainWindow::updateProgressBar()
+{
+    if (!m_generator)
+        return;
+
+    int progress = int(m_generator->getProgress() * 100);
+    progressBar->setValue(progress);
+
+    if (progress == 100)
+    {
+        qDebug() << "Done";
+        this->stop_generation();
+
+    }
+}
+
 
