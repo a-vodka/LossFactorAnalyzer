@@ -13,6 +13,7 @@ SOURCES += \
     audiosettingsdialog.cpp \
     generator.cpp \
     ledindicator.cpp \
+    livechartwidget.cpp \
     main.cpp \
     mainwindow.cpp \
     modbusconfigdialog.cpp \
@@ -23,6 +24,7 @@ HEADERS += \
     audiosettingsdialog.h \
     generator.h \
     ledindicator.h \
+    livechartwidget.h \
     mainwindow.h \
     modbusconfigdialog.h \
     modbusreader.h

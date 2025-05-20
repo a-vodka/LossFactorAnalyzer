@@ -11,6 +11,7 @@
 #include <QMediaDevices>
 #include <QTimer>
 #include <QAudioSink>
+#include "livechartwidget.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -32,6 +33,12 @@ MainWindow::MainWindow(QWidget *parent)
     QLabel *label1 = new QLabel("Sensor 1:");
     QLabel *label2 = new QLabel("Sensor 2:");
 
+    QLabel *status1 = new QLabel("");
+    QLabel *status2 = new QLabel("");
+
+    statusBar()->addPermanentWidget(status1);
+    statusBar()->addPermanentWidget(status2);
+
     statusBar()->addPermanentWidget(label1);
     statusBar()->addPermanentWidget(sensor1Indicator);
     statusBar()->addPermanentWidget(label2);
@@ -43,8 +50,9 @@ MainWindow::MainWindow(QWidget *parent)
     reader->start(dlg->port(), dlg->baudRate(), dlg->dataBits(), dlg->parity(),
                   dlg->stopBits(), dlg->flowControl(), dlg->device1Address(), dlg->device2Address());
 
-    connect(reader, &ModbusReader::dataReady, this, [](int id, float value) {
-        qDebug() << "Device" << id << "Value:" << value;
+    connect(reader, &ModbusReader::dataReady, this, [](int deviceId, int paramIndex, float value) {
+        qDebug() << "Device" << deviceId << "paramIndex:"<< paramIndex << "Value:" << value;
+
     });
 
     connect(reader, &ModbusReader::errorOccurred, this, [](const QString &err) {
@@ -53,11 +61,24 @@ MainWindow::MainWindow(QWidget *parent)
 
     QTimer* statusTimer = new QTimer(this);
     statusTimer->start(1000);
-    connect(statusTimer, &QTimer::timeout, this, [reader, this](){
+    connect(statusTimer, &QTimer::timeout, this, [reader, this, status1, status2](){
         bool ok1 = reader->device1ReadSuccess();
         bool ok2 = reader->device2ReadSuccess();
         sensor1Indicator->setState(ok1 ? LedIndicator::Green : LedIndicator::Red);
         sensor2Indicator->setState(ok2 ? LedIndicator::Green : LedIndicator::Red);
+        float amp1 = reader->lastValue(0, AMP),
+              freq1 = reader->lastValue(0, FREQ),
+              dist1 = reader->lastValue(0, DIST);
+
+        float amp2 = reader->lastValue(1, AMP),
+              freq2 = reader->lastValue(1, FREQ),
+              dist2 = reader->lastValue(1, DIST);
+
+        QString frmt = "Amp = %1 | Freq = %2 | Dist = %3";
+        QString s1 = QString("Sens 1: " + frmt).arg(amp1 / 1e3, 4, 'f' , 2).arg(freq1, 3, 'f', 0).arg(dist1, 3, 'f' , 1);
+        QString s2 = QString("Sens 2: " + frmt).arg(amp2 / 1e3, 4, 'f' , 2).arg(freq2, 3, 'f', 0).arg(dist2, 3, 'f' , 1);
+        status1->setText(s1);
+        status2->setText(s2);
     });
 
     connect(qApp, &QCoreApplication::aboutToQuit, [=]() {
@@ -68,8 +89,14 @@ MainWindow::MainWindow(QWidget *parent)
     m_progressTimer = new QTimer(this);
     connect(m_progressTimer, &QTimer::timeout, this, &MainWindow::updateProgressBar);
 
+    // Assuming `reader` is already started
+    LiveChartWidget* chart = new LiveChartWidget(reader, 0); // 0 = device 1
 
-
+    // Check if group box already has a layout
+    if (!ui->graph_box->layout()) {
+        ui->graph_box->setLayout(new QVBoxLayout());
+    }
+    ui->graph_box->layout()->addWidget(chart);
 }
 
 MainWindow::~MainWindow()

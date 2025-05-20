@@ -77,17 +77,12 @@ void ModbusReader::stopRecording() {
 }
 
 void ModbusReader::clearData() {
-    data1.clear();
-    data2.clear();
+    for (int i = 0; i < 3; ++i) {
+        data1_param[i].clear();
+        data2_param[i].clear();
+    }
 }
 
-const std::vector<float> &ModbusReader::device1Data() const {
-    return data1;
-}
-
-const std::vector<float> &ModbusReader::device2Data() const {
-    return data2;
-}
 
 bool ModbusReader::device1ReadSuccess() const {
     return status1;
@@ -97,6 +92,59 @@ bool ModbusReader::device2ReadSuccess() const {
     return status2;
 }
 
+void ModbusReader::readNextDevice() {
+    if (!isWorking()) return;
+
+    int deviceId = deviceIds[currentDeviceIndex];
+    QVector<quint16> baseAddresses = {0x00CE, 0x00D2, 0x00CA}; // Adjust these if needed
+
+    for (int i = 0; i < 3; ++i) {
+        QModbusDataUnit req(QModbusDataUnit::InputRegisters, baseAddresses[i], 2); // 2 registers for float
+
+        if (auto *reply = modbus->sendReadRequest(req, deviceId)) {
+            if (!reply->isFinished()) {
+                connect(reply, &QModbusReply::finished, this, [=]() {
+                    if (reply->error() == QModbusDevice::NoError) {
+                        float value = convertToFloat(reply->result());
+
+                        // Store last value
+                        int devIdx = (deviceId == deviceIds[0]) ? 0 : 1;
+                        lastValues[devIdx][i] = value;
+
+                        // Emit signal
+                        emit dataReady(deviceId, i, value);
+
+                        if (recording) {
+                            if (devIdx == 0) data1_param[i].push_back(value);
+                            else if (devIdx == 1) data2_param[i].push_back(value);
+                        }
+
+                        if (devIdx == 0) status1 = true;
+                        else if (devIdx == 1) status2 = true;
+
+                    } else {
+                        emit errorOccurred(reply->errorString());
+
+                        if (deviceId == deviceIds[0]) status1 = false;
+                        else if (deviceId == deviceIds[1]) status2 = false;
+                    }
+                    reply->deleteLater();
+                });
+            } else {
+                reply->deleteLater();
+            }
+        } else {
+            qDebug() << "Failed to send Modbus request.";
+            emit errorOccurred("Failed to send Modbus request.");
+            if (deviceId == deviceIds[0]) status1 = false;
+            else if (deviceId == deviceIds[1]) status2 = false;
+        }
+    }
+
+    currentDeviceIndex = (currentDeviceIndex + 1) % deviceIds.size();
+}
+
+/*
 void ModbusReader::readNextDevice() {
     if (!isWorking()) return;
     int deviceId = deviceIds[currentDeviceIndex];
@@ -140,7 +188,7 @@ void ModbusReader::readNextDevice() {
 
     currentDeviceIndex = (currentDeviceIndex + 1) % deviceIds.size();
 }
-
+*/
 float ModbusReader::convertToFloat(const QModbusDataUnit &unit) const {
     if (unit.valueCount() < 2) return 0.0f;
 
@@ -150,4 +198,11 @@ float ModbusReader::convertToFloat(const QModbusDataUnit &unit) const {
     float result;
     memcpy(&result, &raw, sizeof(float));
     return result;
+}
+
+
+float ModbusReader::lastValue(int deviceIndex, int paramIndex) const {
+    if (deviceIndex < 0 || deviceIndex > 1 || paramIndex < 0 || paramIndex > 2)
+        return 0.0f;
+    return lastValues[deviceIndex][paramIndex];
 }
