@@ -37,6 +37,9 @@ public:
     const std::vector<float>& device1Data(int paramIndex) const { return data1_param[paramIndex]; }
     const std::vector<float>& device2Data(int paramIndex) const { return data2_param[paramIndex]; }
 
+    void setSimulationMode(bool enabled);
+    void generateFakeData();
+
 signals:
     void dataReady(int deviceId, int paramIndex, float value);
     void errorOccurred(const QString &error);
@@ -64,6 +67,10 @@ private:
 
     // Latest values for each parameter for each device
     float lastValues[2][3] = {{0.0f}}; // 2 devices x 3 parameters
+
+    bool simulationMode;
+
+    QElapsedTimer simTimer;
 
 
 };

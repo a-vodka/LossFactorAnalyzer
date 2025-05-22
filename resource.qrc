@@ -4,4 +4,7 @@
         <file>icon-ico.ico</file>
         <file>KhPI-logo.png</file>
     </qresource>
+    <qresource prefix="/">
+        <file>report_template.xlsx</file>
+    </qresource>
 </RCC>

@@ -13,6 +13,11 @@
 #include <QAudioSink>
 #include "livechartwidget.h"
 
+// for export into xslx file
+#include "xlsxdocument.h"
+#include "xlsxworkbook.h"
+using namespace QXlsx;
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -46,7 +51,10 @@ MainWindow::MainWindow(QWidget *parent)
 
 
     this->dlg = new modbusconfigdialog(this);
-    ModbusReader *reader = new ModbusReader;
+
+    reader = new ModbusReader;
+
+    reader->setSimulationMode(true);
     reader->start(dlg->port(), dlg->baudRate(), dlg->dataBits(), dlg->parity(),
                   dlg->stopBits(), dlg->flowControl(), dlg->device1Address(), dlg->device2Address());
 
@@ -61,18 +69,18 @@ MainWindow::MainWindow(QWidget *parent)
 
     QTimer* statusTimer = new QTimer(this);
     statusTimer->start(1000);
-    connect(statusTimer, &QTimer::timeout, this, [reader, this, status1, status2](){
-        bool ok1 = reader->device1ReadSuccess();
-        bool ok2 = reader->device2ReadSuccess();
+    connect(statusTimer, &QTimer::timeout, this, [this, status1, status2](){
+        bool ok1 = this->reader->device1ReadSuccess();
+        bool ok2 = this->reader->device2ReadSuccess();
         sensor1Indicator->setState(ok1 ? LedIndicator::Green : LedIndicator::Red);
         sensor2Indicator->setState(ok2 ? LedIndicator::Green : LedIndicator::Red);
-        float amp1 = reader->lastValue(0, AMP),
-              freq1 = reader->lastValue(0, FREQ),
-              dist1 = reader->lastValue(0, DIST);
+        float amp1 =  this->reader->lastValue(0, AMP),
+              freq1 = this->reader->lastValue(0, FREQ),
+              dist1 = this->reader->lastValue(0, DIST);
 
-        float amp2 = reader->lastValue(1, AMP),
-              freq2 = reader->lastValue(1, FREQ),
-              dist2 = reader->lastValue(1, DIST);
+        float amp2 =  this->reader->lastValue(1, AMP),
+              freq2 = this->reader->lastValue(1, FREQ),
+              dist2 = this->reader->lastValue(1, DIST);
 
         QString frmt = "Amp = %1 | Freq = %2 | Dist = %3";
         QString s1 = QString("Sens 1: " + frmt).arg(amp1 / 1e3, 4, 'f' , 2).arg(freq1, 3, 'f', 0).arg(dist1, 3, 'f' , 1);
@@ -90,13 +98,30 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_progressTimer, &QTimer::timeout, this, &MainWindow::updateProgressBar);
 
     // Assuming `reader` is already started
-    LiveChartWidget* chart = new LiveChartWidget(reader, 0); // 0 = device 1
+    this->chart = new LiveChartWidget(reader, 0); // 0 = device 1
 
     // Check if group box already has a layout
     if (!ui->graph_box->layout()) {
         ui->graph_box->setLayout(new QVBoxLayout());
     }
     ui->graph_box->layout()->addWidget(chart);
+
+    // load last experiment parameters
+    QSettings settings;
+    ui->start_freq->setText(settings.value("startFreq", 15).toString());
+    ui->end_freq->setText(settings.value("endFreq", 35).toString());
+    ui->duration->setText(settings.value("duration", 10).toString());
+
+
+    auto setBackgroundToFormColor = [](QLineEdit* lineEdit) {
+        QPalette palette = lineEdit->palette();
+        palette.setColor(QPalette::Base, lineEdit->parentWidget()->palette().color(QPalette::Window));
+        lineEdit->setPalette(palette);
+    };
+
+    setBackgroundToFormColor(ui->loss_factor);
+    setBackgroundToFormColor(ui->peak_width);
+    setBackgroundToFormColor(ui->rs_freq);
 }
 
 MainWindow::~MainWindow()
@@ -136,19 +161,6 @@ QAudioDevice getAudioDeviceById(const QByteArray &deviceId, bool isInput = false
 
 void MainWindow::on_start_btn_clicked()
 {
- /*   QLineSeries *series = new QLineSeries();
-    series->append(0, 0);
-    series->append(1, 2);
-    series->append(2, 1);
-
-    QChart *chart = new QChart();
-    chart->addSeries(series);
-    chart->createDefaultAxes();
-    chart->setTitle("Chart in Designer");
-
-    ui->chartView->setChart(chart);
-*/
-
     if (is_generator_works)
     {
         stop_generation();
@@ -169,6 +181,9 @@ void MainWindow::stop_generation()
     m_audioOutput->stop();
     m_audioOutput->disconnect(this);
     ui->start_btn->setText("Start");
+
+    reader->stopRecording();
+
 }
 
 void MainWindow::start_generation()
@@ -178,7 +193,14 @@ void MainWindow::start_generation()
     float endFreq   = ui->end_freq->text().toFloat();     // Hz
     float duration  = ui->duration->text().toFloat();     // seconds
 
+
     QSettings settings;
+
+    settings.setValue("startFreq", startFreq);
+    settings.setValue("endFreq", endFreq);
+    settings.setValue("duration", duration);
+
+
     QByteArray device_id = settings.value("audio/deviceId").toByteArray();
     QAudioDevice DeviceInfo = getAudioDeviceById(device_id);
 
@@ -206,6 +228,9 @@ void MainWindow::start_generation()
     m_progressTimer->start(250);
 
     ui->start_btn->setText("Stop");
+
+    reader->clearData();
+    reader->startRecording();
 }
 
 void MainWindow::on_actionAbout_triggered()
@@ -245,6 +270,18 @@ void MainWindow::on_actionCOM_Port_Settings_triggered()
 
 void MainWindow::updateProgressBar()
 {
+    if (this->chart->is_success())
+    {
+        float peak_freq = chart->getPeakFreq();
+        float peak_width = chart->getdeltaF();
+        float loss_factor = chart->getlossFactor();
+
+        ui->peak_width->setText(QString::number(peak_width));
+        ui->rs_freq->setText(QString::number(peak_freq));
+        ui->loss_factor->setText(QString::number(loss_factor));
+
+    }
+
     if (!m_generator)
         return;
 
@@ -259,4 +296,62 @@ void MainWindow::updateProgressBar()
     }
 }
 
+
+void MainWindow::on_export_btn_clicked()
+{
+    if (!this->chart->is_success())
+        return;
+
+    QSettings settings;
+
+    // Load last directory or use home if not set
+    QString lastDir = settings.value("lastExportDir", QDir::homePath()).toString();
+
+    // Suggest filename with current date
+    QString defaultFileName = "Report_" + QDate::currentDate().toString("yyyyMMdd") + ".xlsx";
+
+    // Open dialog with suggested filename and last directory
+    QString savePath = QFileDialog::getSaveFileName(
+        this,
+        "Save Excel",
+        QDir(lastDir).filePath(defaultFileName),
+        "Excel Files (*.xlsx)"
+        );
+
+    if (!savePath.isEmpty())
+    {
+        // Save the directory for next time
+        QFileInfo fi(savePath);
+        settings.setValue("lastExportDir", fi.absolutePath());
+
+        // Load the template
+        Document xlsx(":/report_template.xlsx");
+        auto *wb = xlsx.workbook();
+        auto *sheet = wb->sheet(0);
+        if (!sheet) {
+            QMessageBox::warning(this, "Export Failed", "Sheet 'Results' not found in template.");
+            return;
+        }
+
+        // Fill named cells
+        xlsx.write("B6", chart->getPeakFreq());
+        xlsx.write("B7", chart->getpeakAmplitude());
+        xlsx.write("B8", chart->getthreshold());
+        xlsx.write("B9", chart->getf1());
+        xlsx.write("B10", chart->getf2());
+        xlsx.write("B11", chart->getdeltaF());
+        xlsx.write("B12", chart->getlossFactor());
+
+        QImage img = chart->getScreenShot();
+
+        xlsx.insertImage(14, 0, img);
+
+        // Save to new file
+        if (!xlsx.saveAs(savePath)) {
+            QMessageBox::warning(this, "Export Failed", "Failed to save file.");
+            return;
+        }
+    }
+
+}
 

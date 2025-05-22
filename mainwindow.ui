@@ -101,6 +101,9 @@
              </item>
              <item>
               <widget class="QLineEdit" name="rs_freq">
+               <property name="autoFillBackground">
+                <bool>true</bool>
+               </property>
                <property name="readOnly">
                 <bool>true</bool>
                </property>

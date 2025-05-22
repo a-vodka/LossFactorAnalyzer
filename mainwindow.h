@@ -3,9 +3,11 @@
 
 #include <QMainWindow>
 #include <QProgressBar>
+#include "livechartwidget.h"
 #include "modbusconfigdialog.h"
 #include "ledindicator.h"
 #include "generator.h"
+#include "modbusreader.h"
 #include <QAudioSink>
 
 QT_BEGIN_NAMESPACE
@@ -43,10 +45,15 @@ private:
     QScopedPointer<QAudioSink> m_audioOutput;
 
     QTimer *m_progressTimer;
+
+    ModbusReader *reader;
+    LiveChartWidget* chart;
+
     bool is_generator_works = false;
     void stop_generation();
     void start_generation();
 private slots:
     void updateProgressBar();
+    void on_export_btn_clicked();
 };
 #endif // MAINWINDOW_H
