@@ -12,7 +12,7 @@ class LiveChartWidget : public QWidget {
     Q_OBJECT
 
 public:
-    LiveChartWidget(ModbusReader* reader, int deviceIndex, QWidget *parent = nullptr);
+    LiveChartWidget(ModbusReader* reader, QWidget *parent = nullptr);
     QImage getScreenShot();
 
     double getPeakFreq() {return peakFreq;}
@@ -23,6 +23,8 @@ public:
     double getthreshold() { return threshold; }
     double getf1() {return f1;}
     double getf2() {return f2;}
+
+    void setFreqInterval(qreal start_freq, qreal end_freq);
 private slots:
     void updateChart();
 
@@ -32,7 +34,6 @@ private:
     QChartView *chartView;
     QTimer *updateTimer;
     ModbusReader* reader;
-    int deviceIndex;
     void addVerticalLine(QChart* chart, qreal x, qreal minY, qreal maxY, QColor color = Qt::red, int thickness = 3);
     std::vector<float> divideVectors(const std::vector<float>& a, const std::vector<float>& b);
     void computeLossFactorOberst(const std::vector<float>& xData, const std::vector<float>& yData);
@@ -43,7 +44,7 @@ private:
     qreal threshold;
     qreal f1, f2;
     bool m_is_success;
-
+    qreal start_freq = 0, end_freq = 1000;
     QList<QLineSeries*> verticalLines;
 
 

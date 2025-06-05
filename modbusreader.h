@@ -72,8 +72,7 @@ private:
 
     QElapsedTimer simTimer;
 
-
-};
+ };
 
 
 #endif // MODBUSREADER_H

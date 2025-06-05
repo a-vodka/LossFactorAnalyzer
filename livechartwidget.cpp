@@ -1,11 +1,11 @@
 #include "livechartwidget.h"
 
-LiveChartWidget::LiveChartWidget(ModbusReader* reader, int deviceIndex, QWidget *parent)
-    : QWidget(parent), reader(reader), deviceIndex(deviceIndex) {
-
+LiveChartWidget::LiveChartWidget(ModbusReader* reader, QWidget *parent)
+    : QWidget(parent), reader(reader)
+{
     //series = new QScatterSeries();
-    series = new QLineSeries();
     //series->setMarkerSize(8);
+    series = new QLineSeries();
 
     chart = new QChart();
     chart->addSeries(series);
@@ -28,23 +28,55 @@ LiveChartWidget::LiveChartWidget(ModbusReader* reader, int deviceIndex, QWidget 
     updateTimer->start(500);  // Update every 500 ms
 }
 
+void LiveChartWidget::setFreqInterval(qreal start_freq, qreal end_freq){
+    this->start_freq = start_freq;
+    this->end_freq = end_freq;
+}
+
 void LiveChartWidget::updateChart() {
-    const auto &xData = (deviceIndex == 0) ? reader->device1Data(FREQ) : reader->device2Data(FREQ); // param 1 as X
-    //const auto &yData = (deviceIndex == 0) ? reader->device1Data(0) : reader->device2Data(0); // param 0 as Y
+    const auto &xData = reader->device1Data(FREQ);
     const auto yData = divideVectors(reader->device1Data(AMP), reader->device2Data(AMP));
+
+    const int trimCount = 2;
     int count = std::min(xData.size(), yData.size());
-    if (count == 0)
-        return;
+    if (count < 2 * trimCount + 2)
+        return;  // Not enough data
+
+     qDebug() << xData.size() << yData.size() << " << xData size";
+
+    auto xTrimmed = std::vector<float>(xData.begin() + trimCount, xData.begin() + (count - trimCount) );
+    auto yTrimmed = std::vector<float>(yData.begin() + trimCount, yData.begin() + (count - trimCount) );
+
+    qDebug() << xTrimmed.size() << yTrimmed.size() << " << xTrimmed size";
+
+    std::vector<float> xFiltered, yFiltered;
+    for (size_t i = 0; i < xTrimmed.size(); ++i) {
+        if (xTrimmed[i] >= start_freq && xTrimmed[i] <= end_freq) {
+            xFiltered.push_back(xTrimmed[i]);
+            yFiltered.push_back(yTrimmed[i]);
+        }
+    }
+    qDebug() << xFiltered.size() << yFiltered.size() << " << xFiltered size";
     series->clear();
 
-    for (int i = 0; i < count; ++i)
-        series->append(xData[i], yData[i]);
+    for (size_t i = 0; i < xFiltered.size(); ++i)
+    {
+        series->append(xFiltered[i], yFiltered[i]);
+    }
 
-    chart->axes(Qt::Horizontal).first()->setRange(*std::min_element(xData.begin(), xData.end()),
-                                                  *std::max_element(xData.begin(), xData.end()));
-    chart->axes(Qt::Vertical).first()->setRange(*std::min_element(yData.begin(), yData.end()),
-                                                *std::max_element(yData.begin(), yData.end()));
-    computeLossFactorOberst(xData, yData);
+    if (xFiltered.size() < 3)
+        return; // Not enough data
+
+
+    qreal min_y = *std::min_element(yFiltered.begin(), yFiltered.end()),
+          max_y = *std::max_element(yFiltered.begin(), yFiltered.end());
+
+    qDebug() << min_y << max_y;
+
+    chart->axes(Qt::Horizontal).first()->setRange(start_freq, end_freq);
+    chart->axes(Qt::Vertical).first()->setRange(min_y, max_y);
+
+    computeLossFactorOberst(xFiltered, yFiltered);
 }
 
 

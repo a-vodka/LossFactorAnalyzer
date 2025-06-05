@@ -12,7 +12,8 @@ public:
     enum State {
         Off,
         Green,
-        Red
+        Red,
+        Yellow
     };
 
     void setState(State state);

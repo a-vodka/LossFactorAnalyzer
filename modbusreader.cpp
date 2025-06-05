@@ -70,7 +70,7 @@ void ModbusReader::start(const QString &port, int baudRate, int dataBits,
     currentDeviceIndex = 0;
     active = true;
     recording = false;
-    pollTimer->start(250);
+    pollTimer->start(500);
 }
 
 void ModbusReader::stop() {
@@ -120,7 +120,7 @@ void ModbusReader::readNextDevice(){
     if (!isWorking()) return;
 
     int deviceId = deviceIds[currentDeviceIndex];
-    QVector<quint16> baseAddresses = {0x00CE, 0x00D2, 0x00CA}; // Adjust these if needed
+    QVector<quint16> baseAddresses = {0x00CE, 0x00E6, 0x00CA}; // Adjust these if needed
 
     for (int i = 0; i < 3; ++i) {
         QModbusDataUnit req(QModbusDataUnit::InputRegisters, baseAddresses[i], 2); // 2 registers for float
@@ -177,9 +177,9 @@ void ModbusReader::generateFakeData() {
     qint64 ms = simTimer.elapsed();
     float t = ms / 1000.0f; // seconds
 
-    float omega = (t + 40.0)* 2.0 * M_PI;
+    float omega = (t + 7.0)* 2.0 * M_PI;
     float zeta = 0.05f;    // damping ratio
-    float omega_n = 2.0f * M_PI * 55.0f; // natural frequency ~63Hz
+    float omega_n = 2.0f * M_PI * 17.0f; // natural frequency ~63Hz
     float betta = omega / omega_n;
 
     float x = 1.0 / std::sqrt(std::pow((1 - betta * betta), 2) + std::pow(2 * zeta * betta, 2));

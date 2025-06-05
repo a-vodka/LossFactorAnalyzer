@@ -19,6 +19,7 @@ void LedIndicator::paintEvent(QPaintEvent *) {
     switch (currentState) {
     case Green: color = Qt::green; break;
     case Red: color = Qt::red; break;
+    case Yellow: color = Qt::yellow; break;
     default: color = Qt::gray; break;
     }
 

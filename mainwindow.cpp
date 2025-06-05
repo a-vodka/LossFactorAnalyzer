@@ -72,8 +72,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(statusTimer, &QTimer::timeout, this, [this, status1, status2](){
         bool ok1 = this->reader->device1ReadSuccess();
         bool ok2 = this->reader->device2ReadSuccess();
-        sensor1Indicator->setState(ok1 ? LedIndicator::Green : LedIndicator::Red);
-        sensor2Indicator->setState(ok2 ? LedIndicator::Green : LedIndicator::Red);
+
         float amp1 =  this->reader->lastValue(0, AMP),
               freq1 = this->reader->lastValue(0, FREQ),
               dist1 = this->reader->lastValue(0, DIST);
@@ -82,9 +81,22 @@ MainWindow::MainWindow(QWidget *parent)
               freq2 = this->reader->lastValue(1, FREQ),
               dist2 = this->reader->lastValue(1, DIST);
 
+
+        LedIndicator::State l1 = ok1 ? LedIndicator::Green : LedIndicator::Red;
+        LedIndicator::State l2 = ok2 ? LedIndicator::Green : LedIndicator::Red;
+
+        bool y_cond1 = amp1 == 0 && freq1 == 0 && dist1 == 0 && ok1;
+        bool y_cond2 = amp2 == 0 && freq2 == 0 && dist2 == 0 && ok2;
+
+        l1 = y_cond1 ? LedIndicator::Yellow : l1;
+        l2 = y_cond2 ? LedIndicator::Yellow : l2;
+
+        sensor1Indicator->setState(l1);
+        sensor2Indicator->setState(l2);
+
         QString frmt = "Amp = %1 | Freq = %2 | Dist = %3";
-        QString s1 = QString("Sens 1: " + frmt).arg(amp1 / 1e3, 4, 'f' , 2).arg(freq1, 3, 'f', 0).arg(dist1, 3, 'f' , 1);
-        QString s2 = QString("Sens 2: " + frmt).arg(amp2 / 1e3, 4, 'f' , 2).arg(freq2, 3, 'f', 0).arg(dist2, 3, 'f' , 1);
+        QString s1 = QString("Sens 1: " + frmt).arg(amp1 / 1e3, 4, 'f' , 2).arg(freq1, 3, 'f', 1).arg(dist1, 3, 'f' , 1);
+        QString s2 = QString("Sens 2: " + frmt).arg(amp2 / 1e3, 4, 'f' , 2).arg(freq2, 3, 'f', 1).arg(dist2, 3, 'f' , 1);
         status1->setText(s1);
         status2->setText(s2);
     });
@@ -98,7 +110,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_progressTimer, &QTimer::timeout, this, &MainWindow::updateProgressBar);
 
     // Assuming `reader` is already started
-    this->chart = new LiveChartWidget(reader, 0); // 0 = device 1
+    this->chart = new LiveChartWidget(reader, this);
 
     // Check if group box already has a layout
     if (!ui->graph_box->layout()) {
@@ -193,6 +205,7 @@ void MainWindow::start_generation()
     float endFreq   = ui->end_freq->text().toFloat();     // Hz
     float duration  = ui->duration->text().toFloat();     // seconds
 
+    this->chart->setFreqInterval(startFreq, endFreq);
 
     QSettings settings;
 
@@ -280,6 +293,12 @@ void MainWindow::updateProgressBar()
         ui->rs_freq->setText(QString::number(peak_freq));
         ui->loss_factor->setText(QString::number(loss_factor));
 
+    }
+    else
+    {
+        ui->peak_width->setText("");
+        ui->rs_freq->setText("");
+        ui->loss_factor->setText("");
     }
 
     if (!m_generator)
