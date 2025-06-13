@@ -1,3 +1,7 @@
+#include <QFile>
+#include <QTextStream>
+#include <QString>
+
 #include "livechartwidget.h"
 
 LiveChartWidget::LiveChartWidget(ModbusReader* reader, QWidget *parent)
@@ -33,21 +37,61 @@ void LiveChartWidget::setFreqInterval(qreal start_freq, qreal end_freq){
     this->end_freq = end_freq;
 }
 
+
+void LiveChartWidget::saveVectorsToCSV(const QString& filePath,
+                      const std::vector<float>& vec1,
+                      const std::vector<float>& vec2,
+                      const std::vector<float>& vec3,
+                      const std::vector<float>& vec4)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qWarning() << "Could not open file for writing:" << file.errorString();
+        return;
+    }
+
+    QTextStream out(&file);
+
+    // Get the maximum size of the vectors
+    size_t maxSize = std::max({vec1.size(), vec2.size(), vec3.size(), vec4.size()});
+
+    // Write each row
+    for (size_t i = 0; i < maxSize; ++i) {
+        QStringList row;
+        row << (i < vec1.size() ? QString::number(vec1[i]) : "");
+        row << (i < vec2.size() ? QString::number(vec2[i]) : "");
+        row << (i < vec3.size() ? QString::number(vec3[i]) : "");
+        row << (i < vec4.size() ? QString::number(vec4[i]) : "");
+        out << row.join(";") << "\n";
+    }
+
+    file.close();
+    qDebug() << "Data saved to" << filePath;
+}
+
+
 void LiveChartWidget::updateChart() {
-    const auto &xData = reader->device1Data(FREQ);
-    const auto yData = divideVectors(reader->device1Data(AMP), reader->device2Data(AMP));
+    const auto xData = reader->device1Data(FREQ);
+    const auto yD1 = reader->device1Data(AMP);
+    const auto yD2 = reader->device2Data(AMP);
+    const auto yData = divideVectors(yD1, yD2);
+
+    removeVerticalLines();
 
     const int trimCount = 2;
     int count = std::min(xData.size(), yData.size());
-    if (count < 2 * trimCount + 2)
+    if (count < trimCount + 2)
         return;  // Not enough data
 
-     qDebug() << xData.size() << yData.size() << " << xData size";
 
-    auto xTrimmed = std::vector<float>(xData.begin() + trimCount, xData.begin() + (count - trimCount) );
-    auto yTrimmed = std::vector<float>(yData.begin() + trimCount, yData.begin() + (count - trimCount) );
+    //saveVectorsToCSV("output.csv", xData, yD1, yD2, yData); // method for debug only
 
-    qDebug() << xTrimmed.size() << yTrimmed.size() << " << xTrimmed size";
+    // qDebug() << xData.size() << yData.size() << " << xData size";
+
+    auto xTrimmed = std::vector<float>(xData.begin() + trimCount, xData.begin() + (count - 0 * trimCount) );
+    auto yTrimmed = std::vector<float>(yData.begin() + trimCount, yData.begin() + (count - 0 * trimCount) );
+
+    //qDebug() << xTrimmed.size() << yTrimmed.size() << " << xTrimmed size";
 
     std::vector<float> xFiltered, yFiltered;
     for (size_t i = 0; i < xTrimmed.size(); ++i) {
@@ -56,7 +100,7 @@ void LiveChartWidget::updateChart() {
             yFiltered.push_back(yTrimmed[i]);
         }
     }
-    qDebug() << xFiltered.size() << yFiltered.size() << " << xFiltered size";
+    // qDebug() << xFiltered.size() << yFiltered.size() << " << xFiltered size";
     series->clear();
 
     for (size_t i = 0; i < xFiltered.size(); ++i)
@@ -97,10 +141,10 @@ void LiveChartWidget::addVerticalLine(QChart* chart, qreal x, qreal minY, qreal 
 }
 
 std::vector<float> LiveChartWidget::divideVectors(const std::vector<float>& a, const std::vector<float>& b) {
-    size_t maxSize = std::max(a.size(), b.size());
-    std::vector<float> result(maxSize);
+    size_t minSize = std::min(a.size(), b.size());
+    std::vector<float> result(minSize);
 
-    for (size_t i = 0; i < maxSize; ++i) {
+    for (size_t i = 0; i < minSize; ++i) {
         double ai = i < a.size() ? a[i] : 0.0;  // or any default
         double bi = i < b.size() ? b[i] : 1.0;  // avoid zero!
 
@@ -162,13 +206,6 @@ void LiveChartWidget::computeLossFactorOberst(const std::vector<float>& xData, c
         qreal minY = *std::min_element(yData.begin(), yData.end());
         qreal maxY = *std::max_element(yData.begin(), yData.end());
 
-        // Remove previous vertical lines
-        for (QLineSeries* line : verticalLines) {
-            chart->removeSeries(line);
-            delete line;
-        }
-        verticalLines.clear();
-
         // Show new vertical lines
         addVerticalLine(chart, f1, minY, maxY, Qt::blue, 1);
         addVerticalLine(chart, f2, minY, maxY, Qt::blue, 1);
@@ -179,6 +216,13 @@ void LiveChartWidget::computeLossFactorOberst(const std::vector<float>& xData, c
     }
 }
 
+void LiveChartWidget::removeVerticalLines() {
+    for (QLineSeries* line : verticalLines) {
+        chart->removeSeries(line);
+        delete line;
+    }
+    verticalLines.clear();
+}
 
 QImage LiveChartWidget::getScreenShot()
 {

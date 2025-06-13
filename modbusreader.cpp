@@ -4,7 +4,7 @@
 #include <QModbusReply>
 #include <QSerialPort>
 #include <QDebug>
-
+#include <QTest>
 ModbusReader::ModbusReader(QObject *parent) : QObject(parent) {
     modbus = new QModbusRtuSerialClient(this);
     pollTimer = new QTimer(this);
@@ -31,7 +31,7 @@ void ModbusReader::start(const QString &port, int baudRate, int dataBits,
         active = true;
         recording = false;
         simTimer.start(); // Start fake clock
-        pollTimer->start(250);
+        pollTimer->start(200);
         return;
     }
 
@@ -70,7 +70,7 @@ void ModbusReader::start(const QString &port, int baudRate, int dataBits,
     currentDeviceIndex = 0;
     active = true;
     recording = false;
-    pollTimer->start(500);
+    pollTimer->start(200);
 }
 
 void ModbusReader::stop() {
@@ -110,6 +110,76 @@ bool ModbusReader::device2ReadSuccess() const {
     return status2;
 }
 
+
+void ModbusReader::readNextDevice() {
+    if (simulationMode) {
+        generateFakeData();
+        return;
+    }
+
+    if (!isWorking()) return;
+
+    static int currentParamIndex;
+
+    QVector<quint16> baseAddressesRecording  = { 0x00CE, 0x00E6 };  // e.g. just main amplitude and freq
+    QVector<quint16> baseAddressesIdle = { 0x00CE, 0x00E6, 0x00CA }; // full set
+
+    int deviceId = deviceIds[currentDeviceIndex];
+    const QVector<quint16>& activeAddresses = recording ? baseAddressesRecording : baseAddressesIdle;
+
+    if (currentParamIndex >= activeAddresses.size()) {
+        currentParamIndex = 0;
+        currentDeviceIndex = (currentDeviceIndex + 1) % deviceIds.size();
+        return;
+    }
+
+    quint16 address = activeAddresses[currentParamIndex];
+    QModbusDataUnit req(QModbusDataUnit::InputRegisters, address, 2); // float = 2 registers
+
+    if (auto *reply = modbus->sendReadRequest(req, deviceId)) {
+        if (!reply->isFinished()) {
+            connect(reply, &QModbusReply::finished, this, [=]() {
+                if (reply->error() == QModbusDevice::NoError) {
+                    float value = convertToFloat(reply->result());
+
+                    int devIdx = (deviceId == deviceIds[0]) ? 0 : 1;
+                    lastValues[devIdx][currentParamIndex] = value;
+                    emit dataReady(deviceId, currentParamIndex, value);
+
+                    if (recording) {
+                        if (devIdx == 0) data1_param[currentParamIndex].push_back(value);
+                        else if (devIdx == 1) data2_param[currentParamIndex].push_back(value);
+                    }
+
+                    if (devIdx == 0) status1 = true;
+                    else if (devIdx == 1) status2 = true;
+                } else {
+                    emit errorOccurred(reply->errorString());
+                    if (deviceId == deviceIds[0]) status1 = false;
+                    else if (deviceId == deviceIds[1]) status2 = false;
+                }
+
+                reply->deleteLater();
+                currentParamIndex++;
+            });
+        } else {
+            reply->deleteLater();
+            currentParamIndex++;
+        }
+    } else {
+        emit errorOccurred("Failed to send Modbus request.");
+        if (deviceId == deviceIds[0]) status1 = false;
+        else if (deviceId == deviceIds[1]) status2 = false;
+
+        currentParamIndex++;
+    }
+}
+
+
+
+/* old version
+ *
+ *
 void ModbusReader::readNextDevice(){
 
     if (simulationMode) {
@@ -163,10 +233,13 @@ void ModbusReader::readNextDevice(){
             if (deviceId == deviceIds[0]) status1 = false;
             else if (deviceId == deviceIds[1]) status2 = false;
         }
+        // QTest::qWait(250);
     }
 
     currentDeviceIndex = (currentDeviceIndex + 1) % deviceIds.size();
 }
+
+*/
 
 void ModbusReader::setSimulationMode(bool enabled) {
     simulationMode = enabled;
@@ -178,14 +251,14 @@ void ModbusReader::generateFakeData() {
     float t = ms / 1000.0f; // seconds
 
     float omega = (t + 7.0)* 2.0 * M_PI;
-    float zeta = 0.05f;    // damping ratio
+    float zeta = 0.15f;    // damping ratio
     float omega_n = 2.0f * M_PI * 17.0f; // natural frequency ~63Hz
     float betta = omega / omega_n;
 
     float x = 1.0 / std::sqrt(std::pow((1 - betta * betta), 2) + std::pow(2 * zeta * betta, 2));
     float data[2][3] = {
-                         {x*1e3f , float(omega / 2.0 / M_PI), 2.9f},
-                         {1e3f , float(omega / 2.0 / M_PI), 2.8f}
+                         {x*1e3f , float(omega / 2.0 / M_PI), 2.9e3f},
+                         {1e3f , float(omega / 2.0 / M_PI), 2.8e3f}
                         };
     for (int devIdx = 0; devIdx < deviceIds.size(); ++devIdx) {
         for (int i = 0; i < 3; ++i) {

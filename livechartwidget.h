@@ -24,6 +24,12 @@ public:
     double getf1() {return f1;}
     double getf2() {return f2;}
 
+    std::vector<float> getXData()  { return reader ? reader->device1Data(FREQ) : std::vector<float>(0); }
+    std::vector<float> getYData1() { return reader ? reader->device1Data(AMP)  : std::vector<float>(0); }
+    std::vector<float> getYData2() { return reader ? reader->device2Data(AMP) : std::vector<float>(0); }
+    std::vector<float> getYData()  { return divideVectors(getYData1(), getYData2()); }
+
+
     void setFreqInterval(qreal start_freq, qreal end_freq);
 private slots:
     void updateChart();
@@ -47,6 +53,13 @@ private:
     qreal start_freq = 0, end_freq = 1000;
     QList<QLineSeries*> verticalLines;
 
+    void saveVectorsToCSV(const QString& filePath,
+                                           const std::vector<float>& vec1,
+                                           const std::vector<float>& vec2,
+                                           const std::vector<float>& vec3,
+                                           const std::vector<float>& vec4);
+
+    void removeVerticalLines();
 
 };
 

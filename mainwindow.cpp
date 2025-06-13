@@ -54,11 +54,13 @@ MainWindow::MainWindow(QWidget *parent)
 
     reader = new ModbusReader;
 
-    reader->setSimulationMode(true);
+    reader->setSimulationMode(false);
     reader->start(dlg->port(), dlg->baudRate(), dlg->dataBits(), dlg->parity(),
                   dlg->stopBits(), dlg->flowControl(), dlg->device1Address(), dlg->device2Address());
 
     connect(reader, &ModbusReader::dataReady, this, [](int deviceId, int paramIndex, float value) {
+
+        if (paramIndex == FREQ || paramIndex == AMP)
         qDebug() << "Device" << deviceId << "paramIndex:"<< paramIndex << "Value:" << value;
 
     });
@@ -95,8 +97,8 @@ MainWindow::MainWindow(QWidget *parent)
         sensor2Indicator->setState(l2);
 
         QString frmt = "Amp = %1 | Freq = %2 | Dist = %3";
-        QString s1 = QString("Sens 1: " + frmt).arg(amp1 / 1e3, 4, 'f' , 2).arg(freq1, 3, 'f', 1).arg(dist1, 3, 'f' , 1);
-        QString s2 = QString("Sens 2: " + frmt).arg(amp2 / 1e3, 4, 'f' , 2).arg(freq2, 3, 'f', 1).arg(dist2, 3, 'f' , 1);
+        QString s1 = QString("Sens 1: " + frmt).arg(amp1 / 1e3, 4, 'f' , 2).arg(freq1, 3, 'f', 1).arg(dist1 / 1e3, 3, 'f' , 1);
+        QString s2 = QString("Sens 2: " + frmt).arg(amp2 / 1e3, 4, 'f' , 2).arg(freq2, 3, 'f', 1).arg(dist2 / 1e3, 3, 'f' , 1);
         status1->setText(s1);
         status2->setText(s2);
     });
@@ -365,11 +367,33 @@ void MainWindow::on_export_btn_clicked()
 
         xlsx.insertImage(14, 0, img);
 
+        xlsx.selectSheet("Raw data");
+
+        auto write_data = [&xlsx](std::vector<float> data, QString s) {
+
+             for (size_t i = 0; i < data.size(); i++)
+             {
+                 QString addr = s + QString::number(i + 2);
+                 xlsx.write(addr, data[i]);
+             }
+
+        };
+
+        write_data(chart->getXData(), "A");
+        write_data(chart->getYData1(), "B");
+        write_data(chart->getYData2(), "C");
+        write_data(chart->getYData(), "D");
+
+        xlsx.selectSheet("Report");
+
         // Save to new file
         if (!xlsx.saveAs(savePath)) {
             QMessageBox::warning(this, "Export Failed", "Failed to save file.");
             return;
         }
+
+        // Open the file with the default Excel application
+        QDesktopServices::openUrl(QUrl::fromLocalFile(savePath));
     }
 
 }

@@ -37,11 +37,26 @@ void Generator::generateData(const QAudioFormat &format)
     m_buffer.resize(length);
     unsigned char *ptr = reinterpret_cast<unsigned char *>(m_buffer.data());
 
+    const double fadeDurationSec = 1.250; // 250 ms for both fade-in and fade-out
+    int fadeSamples = static_cast<int>(fadeDurationSec * sampleRate);
+
+
     for (int i = 0; i < totalSamples; ++i) {
         double t = static_cast<double>(i) / sampleRate;
         double duration = static_cast<double>(m_durationUs) / 1e6;
         double phase = 2 * M_PI * (m_startFreq * t + (m_endFreq - m_startFreq) * t * t / (2 * duration));
         double x = qSin(phase);
+
+        // Apply fade-in
+        double fadeInFactor = (i < fadeSamples) ? static_cast<double>(i) / fadeSamples : 1.0;
+
+        // Apply fade-out
+        double fadeOutFactor = (i > totalSamples - fadeSamples) ?
+                                   static_cast<double>(totalSamples - i) / fadeSamples : 1.0;
+
+        // Combine both
+        double amplitude = qMin(fadeInFactor, fadeOutFactor);
+        x *= amplitude;
 
         for (int c = 0; c < format.channelCount(); ++c) {
             switch (format.sampleFormat()) {
