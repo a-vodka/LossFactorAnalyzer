@@ -120,9 +120,9 @@ void ModbusReader::readNextDevice() {
     if (!isWorking()) return;
 
     static int currentParamIndex;
-
-    QVector<quint16> baseAddressesRecording  = { 0x00CE, 0x00E6 };  // e.g. just main amplitude and freq
-    QVector<quint16> baseAddressesIdle = { 0x00CE, 0x00E6, 0x00CA }; // full set
+    // 0x00CE
+    QVector<quint16> baseAddressesRecording  = { 0x00D2, 0x00E6 };  // e.g. just main amplitude and freq
+    QVector<quint16> baseAddressesIdle = { 0x00D2, 0x00E6, 0x00CA }; // full set
 
     int deviceId = deviceIds[currentDeviceIndex];
     const QVector<quint16>& activeAddresses = recording ? baseAddressesRecording : baseAddressesIdle;

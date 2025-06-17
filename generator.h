@@ -26,6 +26,10 @@ public:
 private:
     void generateData(const QAudioFormat &format);
 
+    void setAmplitudeTable(const QVector<QPair<double, double>> &table);
+    double interpolateAmplitude(double freq) const;
+    QVector<QPair<double, double>> m_amplitudeTable;     // frequency -> amplitude
+
     qint64 m_pos = 0;
     QByteArray m_buffer;
 

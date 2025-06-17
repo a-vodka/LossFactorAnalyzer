@@ -8,6 +8,17 @@
 Generator::Generator(const QAudioFormat &format, qint64 durationUs, double startFreq, double endFreq)
     : m_durationUs(durationUs), m_startFreq(startFreq), m_endFreq(endFreq)
 {
+    QVector<QPair<double, double>> ampTable = {
+        {     0.0,  1.0},
+        {   100.0,  1.0},
+        {   500.0,  1.0},
+        {  1000.0,  1.0},
+        {  2000.0,  1.0},
+        {  4000.0,  1.0},
+        { 20000.0,  1.0},
+    };
+    this->setAmplitudeTable(ampTable);
+
     if (format.isValid())
         generateData(format);
 }
@@ -21,6 +32,38 @@ void Generator::stop()
 {
     m_pos = 0;
     close();
+}
+
+
+void Generator::setAmplitudeTable(const QVector<QPair<double, double>> &table)
+{
+    m_amplitudeTable = table;
+    std::sort(m_amplitudeTable.begin(), m_amplitudeTable.end()); // ensure sorted by frequency
+}
+
+double Generator::interpolateAmplitude(double freq) const
+{
+    if (m_amplitudeTable.isEmpty())
+        return 1.0;
+
+    // Clamp
+    if (freq <= m_amplitudeTable.first().first)
+        return m_amplitudeTable.first().second;
+    if (freq >= m_amplitudeTable.last().first)
+        return m_amplitudeTable.last().second;
+
+    // Linear interpolation
+    for (int i = 1; i < m_amplitudeTable.size(); ++i) {
+        if (freq < m_amplitudeTable[i].first) {
+            double f1 = m_amplitudeTable[i - 1].first;
+            double f2 = m_amplitudeTable[i].first;
+            double a1 = m_amplitudeTable[i - 1].second;
+            double a2 = m_amplitudeTable[i].second;
+            return a1 + (a2 - a1) * (freq - f1) / (f2 - f1);
+        }
+    }
+
+    return 1.0;
 }
 
 void Generator::generateData(const QAudioFormat &format)
@@ -37,7 +80,7 @@ void Generator::generateData(const QAudioFormat &format)
     m_buffer.resize(length);
     unsigned char *ptr = reinterpret_cast<unsigned char *>(m_buffer.data());
 
-    const double fadeDurationSec = 1.250; // 250 ms for both fade-in and fade-out
+    const double fadeDurationSec = 0.500; // 500 ms for both fade-in and fade-out
     int fadeSamples = static_cast<int>(fadeDurationSec * sampleRate);
 
 
@@ -45,7 +88,10 @@ void Generator::generateData(const QAudioFormat &format)
         double t = static_cast<double>(i) / sampleRate;
         double duration = static_cast<double>(m_durationUs) / 1e6;
         double phase = 2 * M_PI * (m_startFreq * t + (m_endFreq - m_startFreq) * t * t / (2 * duration));
-        double x = qSin(phase);
+
+        double instFreq = m_startFreq + (m_endFreq - m_startFreq) * t / duration;
+        double amplitudeFactor = interpolateAmplitude(instFreq);
+        double x = qSin(phase) * amplitudeFactor;
 
         // Apply fade-in
         double fadeInFactor = (i < fadeSamples) ? static_cast<double>(i) / fadeSamples : 1.0;

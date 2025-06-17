@@ -35,6 +35,7 @@ LiveChartWidget::LiveChartWidget(ModbusReader* reader, QWidget *parent)
 void LiveChartWidget::setFreqInterval(qreal start_freq, qreal end_freq){
     this->start_freq = start_freq;
     this->end_freq = end_freq;
+    chart->axes(Qt::Horizontal).first()->setRange(start_freq, end_freq);
 }
 
 
@@ -78,6 +79,7 @@ void LiveChartWidget::updateChart() {
 
     removeVerticalLines();
 
+
     const int trimCount = 2;
     int count = std::min(xData.size(), yData.size());
     if (count < trimCount + 2)
@@ -115,9 +117,9 @@ void LiveChartWidget::updateChart() {
     qreal min_y = *std::min_element(yFiltered.begin(), yFiltered.end()),
           max_y = *std::max_element(yFiltered.begin(), yFiltered.end());
 
-    qDebug() << min_y << max_y;
+    //qDebug() << min_y << max_y;
 
-    chart->axes(Qt::Horizontal).first()->setRange(start_freq, end_freq);
+
     chart->axes(Qt::Vertical).first()->setRange(min_y, max_y);
 
     computeLossFactorOberst(xFiltered, yFiltered);
