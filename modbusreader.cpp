@@ -70,7 +70,7 @@ void ModbusReader::start(const QString &port, int baudRate, int dataBits,
     currentDeviceIndex = 0;
     active = true;
     recording = false;
-    pollTimer->start(200);
+    pollTimer->start(300);
 }
 
 void ModbusReader::stop() {
@@ -121,6 +121,7 @@ void ModbusReader::readNextDevice() {
 
     static int currentParamIndex;
     // 0x00CE
+    // 210 230 202
     QVector<quint16> baseAddressesRecording  = { 0x00D2, 0x00E6 };  // e.g. just main amplitude and freq
     QVector<quint16> baseAddressesIdle = { 0x00D2, 0x00E6, 0x00CA }; // full set
 
@@ -144,11 +145,13 @@ void ModbusReader::readNextDevice() {
 
                     int devIdx = (deviceId == deviceIds[0]) ? 0 : 1;
                     lastValues[devIdx][currentParamIndex] = value;
-                    emit dataReady(deviceId, currentParamIndex, value);
+
 
                     if (recording) {
                         if (devIdx == 0) data1_param[currentParamIndex].push_back(value);
-                        else if (devIdx == 1) data2_param[currentParamIndex].push_back(value);
+                        if (devIdx == 1) data2_param[currentParamIndex].push_back(value);
+
+                        // emit dataReady(deviceId, currentParamIndex, value);
                     }
 
                     if (devIdx == 0) status1 = true;
@@ -327,7 +330,7 @@ void ModbusReader::readNextDevice() {
 }
 */
 float ModbusReader::convertToFloat(const QModbusDataUnit &unit) const {
-    if (unit.valueCount() < 2) return 0.0f;
+    if (unit.valueCount() < 2) return -1.0f;
 
     quint16 high = unit.value(1);
     quint16 low = unit.value(0);

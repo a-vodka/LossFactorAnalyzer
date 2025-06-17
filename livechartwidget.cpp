@@ -119,6 +119,8 @@ void LiveChartWidget::updateChart() {
 
     //qDebug() << min_y << max_y;
 
+    min_y = std::floor(min_y);
+    max_y = std::ceil(max_y);
 
     chart->axes(Qt::Vertical).first()->setRange(min_y, max_y);
 
@@ -172,7 +174,7 @@ void LiveChartWidget::computeLossFactorOberst(const std::vector<float>& xData, c
     this->peakFreq = xData[peakIndex];
     this->threshold = peakAmplitude / std::sqrt(2.0);
 
-    qDebug() << "Max amp:" << peakAmplitude << "peakIndex: " <<peakIndex << "peakFreq" << peakFreq << "threshold:" << threshold;
+    // qDebug() << "Max amp:" << peakAmplitude << "peakIndex: " <<peakIndex << "peakFreq" << peakFreq << "threshold:" << threshold;
 
     // Step 2: Search for lower and upper frequencies where amplitude crosses threshold
     f1 = -1, f2 = -1;
@@ -186,7 +188,7 @@ void LiveChartWidget::computeLossFactorOberst(const std::vector<float>& xData, c
             break;
         }
     }
-    qDebug() << "F1 " << f1;
+    // qDebug() << "F1 " << f1;
     // Upper side
     for (int i = peakIndex; i < count - 1; ++i) {
         if (yData[i] > threshold && yData[i + 1] <= threshold) {
@@ -196,13 +198,13 @@ void LiveChartWidget::computeLossFactorOberst(const std::vector<float>& xData, c
         }
     }
 
-    qDebug() << "F2 " << f2;
+    // qDebug() << "F2 " << f2;
 
     if (f1 > 0 && f2 > 0) {
         this->deltaF = f2 - f1;
         this->lossFactor = deltaF / peakFreq;
 
-        qDebug() << "Oberst Loss Factor (η):" << lossFactor;
+        // qDebug() << "Oberst Loss Factor (η):" << lossFactor;
 
         // Show vertical lines on chart
         qreal minY = *std::min_element(yData.begin(), yData.end());
@@ -214,12 +216,12 @@ void LiveChartWidget::computeLossFactorOberst(const std::vector<float>& xData, c
         addVerticalLine(chart, peakFreq, minY, maxY, Qt::red, 2);
         m_is_success = true;
     } else {
-        qDebug() << "Unable to find both threshold crossings.";
+        // qDebug() << "Unable to find both threshold crossings.";
     }
 }
 
 void LiveChartWidget::removeVerticalLines() {
-    for (QLineSeries* line : verticalLines) {
+    for (QLineSeries* line : std::as_const(verticalLines)) {
         chart->removeSeries(line);
         delete line;
     }
