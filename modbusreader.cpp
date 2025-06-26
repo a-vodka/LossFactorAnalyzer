@@ -4,7 +4,7 @@
 #include <QModbusReply>
 #include <QSerialPort>
 #include <QDebug>
-#include <QTest>
+
 ModbusReader::ModbusReader(QObject *parent) : QObject(parent) {
     modbus = new QModbusRtuSerialClient(this);
     pollTimer = new QTimer(this);

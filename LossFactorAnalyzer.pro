@@ -1,4 +1,4 @@
-QT       += core gui charts serialport serialbus multimedia testlib
+QT       += core gui charts serialport serialbus multimedia
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
