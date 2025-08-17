@@ -23,6 +23,8 @@ public:
     QString flowControl() const;
     int device1Address() const;
     int device2Address() const;
+    int generatorAddress() const;
+    int generatorVolume() const;
 public slots:
     void accept();
 

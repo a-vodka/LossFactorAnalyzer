@@ -1,4 +1,4 @@
-QT       += core gui charts serialport serialbus multimedia
+QT       += core gui charts serialport serialbus
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -10,8 +10,6 @@ CONFIG += c++17
 
 SOURCES += \
     aboutdialog.cpp \
-    audiosettingsdialog.cpp \
-    generator.cpp \
     ledindicator.cpp \
     livechartwidget.cpp \
     main.cpp \
@@ -21,17 +19,15 @@ SOURCES += \
 
 HEADERS += \
     aboutdialog.h \
-    audiosettingsdialog.h \
-    generator.h \
     ledindicator.h \
     livechartwidget.h \
     mainwindow.h \
     modbusconfigdialog.h \
-    modbusreader.h
+    modbusreader.h \
+    skewed_lorentzian_fit.hpp
 
 FORMS += \
     aboutdialog.ui \
-    audiosettingsdialog.ui \
     mainwindow.ui \
     modbusconfigdialog.ui
 

@@ -6,9 +6,8 @@
 #include "livechartwidget.h"
 #include "modbusconfigdialog.h"
 #include "ledindicator.h"
-#include "generator.h"
 #include "modbusreader.h"
-#include <QAudioSink>
+
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -24,6 +23,8 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     void updateProgress(int value);
+
+
 
 private slots:
 
@@ -41,9 +42,6 @@ private:
     LedIndicator *sensor1Indicator;
     LedIndicator *sensor2Indicator;
 
-    QScopedPointer<Generator> m_generator;
-    QScopedPointer<QAudioSink> m_audioOutput;
-
     QTimer *m_progressTimer;
 
     ModbusReader *reader;
@@ -55,5 +53,6 @@ private:
 private slots:
     void updateProgressBar();
     void on_export_btn_clicked();
+    void on_approximation_check_box_checkStateChanged(const Qt::CheckState &arg1);
 };
 #endif // MAINWINDOW_H

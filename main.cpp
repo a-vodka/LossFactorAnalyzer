@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
 
     QCoreApplication::setOrganizationName("Normaizol");
     QCoreApplication::setApplicationName("LossFactorAnalyzer");
-    QCoreApplication::setApplicationVersion("1.0.0");
+    QCoreApplication::setApplicationVersion("1.5.0");
 
     //set ico
     QApplication::setWindowIcon(QIcon(":/images/icon-ico.ico"));

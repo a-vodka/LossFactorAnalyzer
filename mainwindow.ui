@@ -138,6 +138,13 @@
               </widget>
              </item>
              <item>
+              <widget class="QCheckBox" name="approximation_check_box">
+               <property name="text">
+                <string>Approximation</string>
+               </property>
+              </widget>
+             </item>
+             <item>
               <widget class="QPushButton" name="export_btn">
                <property name="text">
                 <string>Export</string>
@@ -183,7 +190,7 @@
     </property>
     <addaction name="actionCOM_Port_Settings"/>
     <addaction name="separator"/>
-    <addaction name="actionAudio_Settings"/>
+    <addaction name="action"/>
     <addaction name="separator"/>
     <addaction name="separator"/>
     <addaction name="separator"/>
@@ -208,9 +215,12 @@
     <string>COM Port Settings</string>
    </property>
   </action>
-  <action name="actionAudio_Settings">
+  <action name="action">
    <property name="text">
     <string>Audio Settings</string>
+   </property>
+   <property name="visible">
+    <bool>false</bool>
    </property>
   </action>
   <action name="action_5">

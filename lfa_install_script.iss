@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "LossFactorAnalyzer"
-#define MyAppVersion "1.0"
+#define MyAppVersion "1.5"
 #define MyAppPublisher "Normaizol"
 #define MyAppURL "https://github.com/a-vodka/LossFactorAnalyzer"
 #define MyAppExeName "LossFactorAnalyzer.exe"

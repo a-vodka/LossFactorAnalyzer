@@ -28,7 +28,11 @@ modbusconfigdialog::modbusconfigdialog(QWidget *parent)
     ui->comboFlowControl->setCurrentText(settings.value("modbus/flowControl", "None").toString());
 
     ui->lineDevice1->setText(settings.value("modbus/device1", "246").toString());
-    ui->lineDevice2->setText(settings.value("modbus/device2", "247").toString());
+    ui->lineDevice2->setText(settings.value("modbus/device2", "126").toString());
+    ui->lineGenerator->setText(settings.value("modbus/generatorAddress", "127").toString());
+
+    ui->spinGeneratorVolume->setValue(settings.value("modbus/generatorVolume", "50").toInt());
+
 
     QString savedPort = settings.value("modbus/port").toString();
     int index = ui->comboPort->findText(savedPort);
@@ -81,6 +85,14 @@ int modbusconfigdialog::device2Address() const {
     return ui->lineDevice2->text().toInt();
 }
 
+int modbusconfigdialog::generatorAddress() const {
+    return ui->lineGenerator->text().toInt();
+}
+
+int modbusconfigdialog::generatorVolume() const {
+    return ui->spinGeneratorVolume->value();
+}
+
 void modbusconfigdialog::accept()
 {
     QSettings settings;
@@ -93,6 +105,9 @@ void modbusconfigdialog::accept()
     settings.setValue("modbus/flowControl", flowControl());
     settings.setValue("modbus/device1", device1Address());
     settings.setValue("modbus/device2", device2Address());
+
+    settings.setValue("modbus/generatorAddress", generatorAddress());
+    settings.setValue("modbus/generatorVolume", generatorVolume());
 
     QDialog::accept(); // Call base class
 }

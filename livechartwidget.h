@@ -31,6 +31,7 @@ public:
 
 
     void setFreqInterval(qreal start_freq, qreal end_freq);
+    void useApproximation(bool isUse);
 private slots:
     void updateChart();
 
@@ -50,6 +51,7 @@ private:
     qreal threshold;
     qreal f1, f2;
     bool m_is_success;
+    bool m_use_approximation;
     qreal start_freq = 0, end_freq = 1000;
     QList<QLineSeries*> verticalLines;
 
@@ -61,6 +63,7 @@ private:
 
     void removeVerticalLines();
 
+    void fitData(std::vector<float> frequencies, std::vector<float> amplitudes);
 };
 
 #endif // LIVECHARTWIDGET_H

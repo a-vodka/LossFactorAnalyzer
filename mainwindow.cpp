@@ -1,16 +1,10 @@
 #include "mainwindow.h"
-#include "audiosettingsdialog.h"
-#include "generator.h"
 #include "ui_mainwindow.h"
 #include <QLineSeries>
 #include <aboutdialog.h>
 #include "modbusconfigdialog.h"
 #include "modbusreader.h"
-#include <QAudioOutput>
-#include <QAudioDevice>
-#include <QMediaDevices>
 #include <QTimer>
-#include <QAudioSink>
 #include "livechartwidget.h"
 
 // for export into xslx file
@@ -56,7 +50,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     reader->setSimulationMode(false);
     reader->start(dlg->port(), dlg->baudRate(), dlg->dataBits(), dlg->parity(),
-                  dlg->stopBits(), dlg->flowControl(), dlg->device1Address(), dlg->device2Address());
+                  dlg->stopBits(), dlg->flowControl(), dlg->device1Address(), dlg->device2Address(), dlg->generatorAddress());
 
     connect(reader, &ModbusReader::dataReady, this, [](int deviceId, int paramIndex, float value) {
 
@@ -152,27 +146,6 @@ void MainWindow::updateProgress(int value)
     progressBar->setValue(value);
 }
 
-
-QAudioDevice getAudioDeviceById(const QByteArray &deviceId, bool isInput = false)
-{
-    const QList<QAudioDevice> devices = isInput
-                                            ? QMediaDevices::audioInputs()
-                                            : QMediaDevices::audioOutputs();
-
-    for (const QAudioDevice &device : devices) {
-        if (device.id() == deviceId) {
-            qDebug() << "Found audio device with id" << deviceId;
-            return device;  // Found the matching device
-        }
-    }
-
-    qDebug() << "NOT Found audio device. Use Default";
-
-    return isInput ? QMediaDevices(nullptr).defaultAudioInput() : QMediaDevices(nullptr).defaultAudioOutput();  // Return default-constructed (invalid) if not found
-}
-
-
-
 void MainWindow::on_start_btn_clicked()
 {
     if (is_generator_works)
@@ -191,11 +164,8 @@ void MainWindow::stop_generation()
     is_generator_works = false;
     m_progressTimer->stop();
 
-    m_generator->stop();
-    m_audioOutput->stop();
-    m_audioOutput->disconnect(this);
     ui->start_btn->setText("Start");
-
+    reader->stopSweep();
     reader->stopRecording();
 
 }
@@ -215,36 +185,22 @@ void MainWindow::start_generation()
     settings.setValue("endFreq", endFreq);
     settings.setValue("duration", duration);
 
-
-    QByteArray device_id = settings.value("audio/deviceId").toByteArray();
-    QAudioDevice DeviceInfo = getAudioDeviceById(device_id);
-
-    QAudioFormat format = DeviceInfo.preferredFormat();
-    qDebug() << "Device: " << DeviceInfo.description();
-    qDebug() << "Sample format: " <<format.sampleFormat();
-    qDebug() << "Channel config: " <<  format.channelConfig();
-    qDebug() << "Channel count:" << format.channelCount();
-    qDebug() << "Channel sample rate:" << format.sampleRate();
-
-    qint64 durationUs = duration * 1000000; // 3 seconds
-
-    int value = settings.value("audio/volume").toInt();
-    qreal linearVolume = QAudio::convertVolume(value / qreal(100), QAudio::LogarithmicVolumeScale,
-                                               QAudio::LinearVolumeScale);
-
-    qDebug() << "Linear volume:" << linearVolume;
-
-    m_generator.reset(new Generator(format, durationUs, startFreq, endFreq));
-    m_audioOutput.reset(new QAudioSink(DeviceInfo, format));
-    m_audioOutput->setVolume(linearVolume);
-    m_generator->start();
-    m_audioOutput->start(m_generator.data());
-
     m_progressTimer->start(250);
 
     ui->start_btn->setText("Stop");
 
     reader->clearData();
+    float sweep_speed = fabs(endFreq - startFreq) / (duration / 60.0f);
+    int generatorVolume = settings.value("modbus/generatorVolume").toInt();
+    reader->startSweep(
+        generatorVolume,                      // Amplitude %
+        startFreq,                            // Start frequency Hz
+        endFreq,                              // End frequency Hz
+        sweep_speed,                          // Sweep speed Hz/min
+        1,                                    // Cycles
+        ModbusReader::SweepFminToFmax         // Direction
+        );
+
     reader->startRecording();
 }
 
@@ -256,14 +212,7 @@ void MainWindow::on_actionAbout_triggered()
 
 void MainWindow::on_actionAudio_Settings_triggered()
 {
-    static AudioSettingsDialog dialog(this);
-    if (dialog.exec() == QDialog::Accepted)
-    {
-        QString deviceId = dialog.selectedDeviceId();
-        int volume = dialog.selectedVolume();
-        qDebug() << "Device id: " <<deviceId;
-        qDebug() << "Volume:" << volume;
-    }
+
 }
 
 void MainWindow::on_actionCOM_Port_Settings_triggered()
@@ -275,11 +224,10 @@ void MainWindow::on_actionCOM_Port_Settings_triggered()
         qDebug() << "Data bits:" << dlg.dataBits();
         qDebug() << "Parity:" << dlg.parity();
         qDebug() << "Stop bits:" << dlg.stopBits();
-        qDebug() << "Flow control:" << dlg.flowControl();
-        int addr1 = dlg.device1Address();
-        int addr2 = dlg.device2Address();
-        qDebug() << "Device 1 Address:" << addr1;
-        qDebug() << "Device 2 Address:" << addr2;
+        qDebug() << "Device 1 Address:" << dlg.device1Address();
+        qDebug() << "Device 2 Address:" << dlg.device2Address();
+        qDebug() << "Generator Address:" << dlg.generatorAddress();
+        qDebug() << "Generator Volume:" << dlg.generatorVolume();
     }
 }
 
@@ -303,17 +251,17 @@ void MainWindow::updateProgressBar()
         ui->loss_factor->setText("");
     }
 
-    if (!m_generator)
-        return;
 
-    int progress = int(m_generator->getProgress() * 100);
+    int progress = this->reader->getProgress();
     progressBar->setValue(progress);
 
     if (progress == 100)
     {
         qDebug() << "Done";
-        this->stop_generation();
-
+        is_generator_works = false;
+        ui->start_btn->setText("Start");
+        m_progressTimer->stop();
+        //this->stop_generation();
     }
 }
 
@@ -396,5 +344,12 @@ void MainWindow::on_export_btn_clicked()
         QDesktopServices::openUrl(QUrl::fromLocalFile(savePath));
     }
 
+}
+
+
+void MainWindow::on_approximation_check_box_checkStateChanged(const Qt::CheckState &arg1)
+{
+    if (this->chart)
+        this->chart->useApproximation(arg1 == Qt::CheckState::Checked);
 }
 

@@ -2,6 +2,7 @@
 #include <QTextStream>
 #include <QString>
 
+#include "skewed_lorentzian_fit.hpp"
 #include "livechartwidget.h"
 
 LiveChartWidget::LiveChartWidget(ModbusReader* reader, QWidget *parent)
@@ -71,6 +72,92 @@ void LiveChartWidget::saveVectorsToCSV(const QString& filePath,
 }
 
 
+void LiveChartWidget::fitData(std::vector<float> frequencies, std::vector<float> amplitudes)
+{
+    if (frequencies.empty()) {
+        // synthetic example (replace with your actual data load)
+        frequencies = linspace(7.0, 30.0, 40);
+        for (size_t i = 0; i < frequencies.size(); ++i)
+            amplitudes.push_back(skewed_lorentzian(frequencies[i], 1.0, 20.0, 0.11, 0.02, 0.0));
+    }
+
+    // --- Initial guesses (like Python)
+    float A0 = *std::max_element(amplitudes.begin(), amplitudes.end());
+    auto itmax = std::max_element(amplitudes.begin(), amplitudes.end());
+    size_t idx_max = std::distance(amplitudes.begin(), itmax);
+    float f0 = frequencies[idx_max];
+    float eta = 0.05;
+    float alpha = 0.0;
+    float offset = *std::min_element(amplitudes.begin(), amplitudes.end());
+
+    // --- First fit (all data)
+    fit_skewed_lorentzian_basic(frequencies, amplitudes, A0, f0, eta, alpha, offset);
+
+    // --- Compute residuals and filter outliers (|res| < 2*std)
+    std::vector<float> residuals(frequencies.size());
+    for (size_t i = 0; i < frequencies.size(); ++i)
+        residuals[i] = amplitudes[i] - skewed_lorentzian(frequencies[i], A0, f0, eta, alpha, offset);
+
+    float res_mean = mean(residuals);
+    float res_std  = stddev(residuals, res_mean);
+    float threshold = 2.0 * res_std;
+
+    std::vector<float> xf, yf;
+    for (size_t i = 0; i < frequencies.size(); ++i) {
+        if (std::abs(residuals[i]) < threshold) {
+            xf.push_back(frequencies[i]);
+            yf.push_back(amplitudes[i]);
+        }
+    }
+
+    // If filtering removed everything (edge case), keep all
+    if (xf.size() < 3) { xf = frequencies; yf = amplitudes; }
+
+    // --- Refit on filtered data with previous params as initial guess
+    fit_skewed_lorentzian_basic(xf, yf, A0, f0, eta, alpha, offset);
+
+    // --- Goodness of fit (R^2) computed on filtered points
+    float ss_res = 0.0, ss_tot = 0.0;
+    float mean_y = mean(yf);
+    for (size_t i = 0; i < xf.size(); ++i) {
+        float yfitted = skewed_lorentzian(xf[i], A0, f0, eta, alpha, offset);
+        float diff = yf[i] - yfitted;
+        ss_res += diff*diff;
+        float dt = yf[i] - mean_y;
+        ss_tot += dt*dt;
+    }
+    float r_squared = (ss_tot > 0.0) ? 1.0 - ss_res/ss_tot : 1.0;
+
+    // --- Make dense fitted curve and compute half-power loss factor (Oberst)
+    auto new_freq = linspace(frequencies.front(), frequencies.back(), 150);
+    std::vector<float> fitted(new_freq.size());
+    for (size_t i = 0; i < new_freq.size(); ++i)
+        fitted[i] = skewed_lorentzian(new_freq[i], A0, f0, eta, alpha, offset);
+
+    float A_peak = *std::max_element(fitted.begin(), fitted.end());
+    float half_power = A_peak / std::sqrt(2.0);
+
+    // find contiguous region where fitted >= half_power
+    size_t first_idx = 0, last_idx = fitted.size() - 1;
+    for (size_t i = 0; i < fitted.size(); ++i) {
+        if (fitted[i] >= half_power) { first_idx = i; break; }
+    }
+    for (size_t i = fitted.size(); i-- > 0;) {
+        if (fitted[i] >= half_power) { last_idx = i; break; }
+    }
+    float delta_f = new_freq[last_idx] - new_freq[first_idx];
+    float eta_half_power = delta_f / f0;
+    float f_max_amp = new_freq[std::distance(fitted.begin(), std::max_element(fitted.begin(), fitted.end()))];
+
+    // --- Print results
+    qDebug() << "Fitted params (A0, f0, eta, alpha, offset):\n";
+    qDebug() << A0 << ", " << f0 << ", " << eta << ", " << alpha << ", " << offset << "\n";
+    qDebug() << "R^2 (on filtered data): " << r_squared << "\n";
+    qDebug() << "Loss factor from fit: eta = " << eta << "\n";
+    qDebug() << "Loss factor by half-power: eta ≈ " << eta_half_power << "\n";
+
+}
+
 void LiveChartWidget::updateChart() {
     const auto xData = reader->device1Data(FREQ);
     const auto yD1 = reader->device1Data(AMP);
@@ -124,7 +211,10 @@ void LiveChartWidget::updateChart() {
 
     chart->axes(Qt::Vertical).first()->setRange(min_y, max_y);
 
-    computeLossFactorOberst(xFiltered, yFiltered);
+    if (m_use_approximation)
+        fitData(xFiltered, yFiltered);
+    else
+        computeLossFactorOberst(xFiltered, yFiltered);
 }
 
 
@@ -149,8 +239,8 @@ std::vector<float> LiveChartWidget::divideVectors(const std::vector<float>& a, c
     std::vector<float> result(minSize);
 
     for (size_t i = 0; i < minSize; ++i) {
-        double ai = i < a.size() ? a[i] : 0.0;  // or any default
-        double bi = i < b.size() ? b[i] : 1.0;  // avoid zero!
+        float ai = i < a.size() ? a[i] : 0.0;  // or any default
+        float bi = i < b.size() ? b[i] : 1.0;  // avoid zero!
 
         result[i] = bi != 0 ? ai / bi : 0.0;
     }
@@ -251,4 +341,10 @@ QImage LiveChartWidget::getScreenShot()
     QImage img = QImage::fromData(imageBytes, "PNG");
     return img;
 
+}
+
+void  LiveChartWidget::useApproximation(bool isUse)
+{
+    m_use_approximation = isUse;
+    this->updateChart();
 }
