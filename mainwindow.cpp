@@ -48,7 +48,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     reader = new ModbusReader;
 
-    reader->setSimulationMode(false);
+    reader->setSimulationMode(true);
     reader->start(dlg->port(), dlg->baudRate(), dlg->dataBits(), dlg->parity(),
                   dlg->stopBits(), dlg->flowControl(), dlg->device1Address(), dlg->device2Address(), dlg->generatorAddress());
 

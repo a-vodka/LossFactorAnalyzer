@@ -43,16 +43,16 @@ private:
     ModbusReader* reader;
     void addVerticalLine(QChart* chart, qreal x, qreal minY, qreal maxY, QColor color = Qt::red, int thickness = 3);
     std::vector<float> divideVectors(const std::vector<float>& a, const std::vector<float>& b);
-    void computeLossFactorOberst(const std::vector<float>& xData, const std::vector<float>& yData);
-    qreal peakFreq;
-    qreal deltaF;
-    qreal lossFactor;
-    qreal peakAmplitude;
-    qreal threshold;
-    qreal f1, f2;
+    bool computeLossFactorOberst(const std::vector<float>& xData, const std::vector<float>& yData);
+    float peakFreq;
+    float deltaF;
+    float lossFactor;
+    float peakAmplitude;
+    float threshold;
+    float f1, f2;
     bool m_is_success;
     bool m_use_approximation;
-    qreal start_freq = 0, end_freq = 1000;
+    float start_freq = 0, end_freq = 1000;
     QList<QLineSeries*> verticalLines;
 
     void saveVectorsToCSV(const QString& filePath,
@@ -63,7 +63,34 @@ private:
 
     void removeVerticalLines();
 
-    void fitData(std::vector<float> frequencies, std::vector<float> amplitudes);
+    bool fitData(const std::vector<float>& frequencies,
+                 const std::vector<float>& amplitudes,
+                 std::vector<float>& fitX,
+                 std::vector<float>& fitY);
+
+    QXYSeries* createSeries(const QVector<float>& x, const QVector<float>& y,
+                            const QString& name, const QPen& pen = QPen(Qt::SolidLine), bool isLineSeris = true);
+    QChartView* createResonanceChart(
+        const std::vector<float>& frequencies,
+        const std::vector<float>& amplitudes,
+        const std::vector<float>& new_freq,
+        const std::vector<float>& fitted,
+        float half_power,
+        int first_idx,
+        int last_idx,
+        float f_max_amp);
+
+    QValueAxis *axisX;
+    QValueAxis *axisY;
+    void refreshChart(const std::vector<float>& x,
+                      const std::vector<float>& y,
+                      const std::vector<float>& fitX = {},
+                      const std::vector<float>& fitY = {},
+                      const bool status = false);
+    bool calculateHalfPowerBandwidth(const std::vector<float>& freq,
+                                     const std::vector<float>& amp,
+                                     float &f1, float &f2, float &lossFactor);
+
 };
 
 #endif // LIVECHARTWIDGET_H
